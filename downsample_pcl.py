@@ -20,13 +20,15 @@ import open3d as o3d
 def convert_stl_to_ply_downsampled(
     stl_path,
     ply_output_path,
-    target_num_points=1000000
+    target_num_points=1000000,
+    scale_to_meters=True
 ):
     mesh = o3d.io.read_triangle_mesh(stl_path)
     mesh.compute_vertex_normals()
 
     # SCALE: Convert mm → meters
-    mesh.scale(0.001, center=mesh.get_center())
+    if scale_to_meters:
+        mesh.scale(0.001, center=mesh.get_center())
 
     # Downsample
     pcd = mesh.sample_points_poisson_disk(target_num_points)
@@ -37,6 +39,7 @@ def convert_stl_to_ply_downsampled(
     return pcd
 
 # Example usage:
-stl_file = "select-00.stl"
-ply_file = "select-00_downsampled100w_meter.ply"
-convert_stl_to_ply_downsampled(stl_file, ply_file, target_num_points=1000000)
+#for this "CombinedFace_20250815_103713.ply" we remain the unit as mm
+stl_file = "CombinedFace_20250815_103713.ply"
+ply_file = "CombinedFace_20250815_103713_downsampled50wmm.ply"
+convert_stl_to_ply_downsampled(stl_file, ply_file, target_num_points=100000, scale_to_meters=False)

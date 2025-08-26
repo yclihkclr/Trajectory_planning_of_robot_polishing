@@ -19,138 +19,12 @@ def get_principal_axes(pcd):
     eigvals, eigvecs = np.linalg.eig(cov)
     return eigvecs, centroid
 
-# def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0):
-#     eigvecs, center = get_principal_axes(pcd)
-#     primary_dir = eigvecs[:, 0]  # Direction for slicing lines
-#     secondary_dir = eigvecs[:, 1]  # Direction along lines
-#     normal_dir = eigvecs[:, 2]  # Rough normal approximation for slicing planes
-
-#     points = np.asarray(pcd.points)
-#     normals = np.asarray(pcd.normals)
-
-#     # Project points onto slicing axis
-#     projections = points @ primary_dir
-#     min_proj, max_proj = projections.min(), projections.max()
-#     num_slices = int((max_proj - min_proj) / line_spacing) + 1
-#     trajectory = []
-#     for i in range(num_slices):
-#         proj_val = min_proj + i * line_spacing
-#         mask = np.abs(projections - proj_val) < line_spacing / 2
-#         slice_points = points[mask]
-#         slice_normals = normals[mask]
-
-#         if len(slice_points) < 2:
-#             continue
-
-#         # Sort slice points along secondary axis
-#         secondary_proj = slice_points @ secondary_dir
-#         sorted_idx = np.argsort(secondary_proj)
-#         if i % 2 == 1:
-#             sorted_idx = sorted_idx[::-1]
-
-#         sorted_points = slice_points[sorted_idx]
-#         sorted_normals = slice_normals[sorted_idx]
-#         sorted_proj = secondary_proj[sorted_idx]
-
-#         # Uniform sampling along the projection direction
-#         if len(sorted_points) < 2:
-#             continue
-
-#         sampled_indices = [0]
-#         last_proj_val = sorted_proj[0]
-#         for j in range(1, len(sorted_points)):
-#             if abs(sorted_proj[j] - last_proj_val) >= point_spacing:
-#                 sampled_indices.append(j)
-#                 last_proj_val = sorted_proj[j]
-
-#         for j in sampled_indices:
-#             point = sorted_points[j]
-#             normal = sorted_normals[j]
-#             z_axis = -normal / np.linalg.norm(normal)
-#             x_axis = np.cross(secondary_dir, z_axis)
-#             x_axis /= np.linalg.norm(x_axis)
-#             y_axis = np.cross(z_axis, x_axis)
-#             rotation = np.column_stack([x_axis, y_axis, z_axis])
-#             offset_point = point + offset * z_axis
-#             trajectory.append((offset_point, rotation))
-
-#     return trajectory
-
-# #old version with only plane projection and simple slab assamption
-# def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thickness=0.001):
-#     eigvecs, center = get_principal_axes(pcd)
-#     primary_dir = eigvecs[:, 0]  # slicing direction
-#     secondary_dir = eigvecs[:, 1]  # line direction
-
-#     points = np.asarray(pcd.points)
-#     normals = np.asarray(pcd.normals)
-
-#     projections = points @ primary_dir
-#     min_proj, max_proj = projections.min(), projections.max()
-#     num_slices = int((max_proj - min_proj) / line_spacing) + 1
-
-#     trajectory = []
-
-#     for i in range(num_slices):
-#         proj_val = min_proj + i * line_spacing
-
-#         # Extract points near this slicing plane
-#         slab_mask = np.abs(projections - proj_val) < thickness
-#         slab_points = points[slab_mask]
-#         slab_normals = normals[slab_mask]
-
-#         if len(slab_points) < 2:
-#             continue
-
-#         # Project slab points onto slicing line (secondary direction)
-#         secondary_proj = slab_points @ secondary_dir
-#         sorted_idx = np.argsort(secondary_proj)
-#         if i % 2 == 1:
-#             sorted_idx = sorted_idx[::-1]
-
-#         sorted_pts = slab_points[sorted_idx]
-#         sorted_nrm = slab_normals[sorted_idx]
-#         proj_vals = secondary_proj[sorted_idx]
-
-#         # Generate strict straight line samples
-#         start, end = proj_vals[0], proj_vals[-1]
-#         length = end - start
-#         num_samples = max(int(abs(length) / point_spacing) + 1, 2)
-#         print("num_samples is:",num_samples)
-#         line_samples = np.linspace(start, end, num_samples)
-#         line_positions = np.outer(line_samples, secondary_dir) + np.outer(np.full_like(line_samples, proj_val), primary_dir)
-
-#         # Nearest-neighbor lookup from line to real surface points for normals
-#         kdtree = KDTree(slab_points)
-#         _, nn_indices = kdtree.query(line_positions)
-
-#         for j, sample_pos in enumerate(line_positions):
-#             nearest_idx = nn_indices[j]
-#             surface_point = slab_points[nearest_idx]
-#             normal = slab_normals[nearest_idx]
-
-#             z_axis = -normal / np.linalg.norm(normal)
-#             x_axis = np.cross(secondary_dir, z_axis)
-#             x_axis /= np.linalg.norm(x_axis)
-#             y_axis = np.cross(z_axis, x_axis)
-#             rot = np.column_stack((x_axis, y_axis, z_axis))
-
-#             # Place point at surface + offset
-#             offset_pos = surface_point + offset * z_axis
-#             trajectory.append((offset_pos, rot))
-
-
-
-
-#     return trajectory
-
-
-# new version combine 2D plane projection and Convex Hull bounding Box which gives good results
-def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thickness=0.002):
+# new version combine 2D plane projection and Convex Hull bounding Box which gives good results, U pattern is guaranteed
+def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thickness=0.005):
     eigvecs, center = get_principal_axes(pcd)
     primary_dir = eigvecs[:, 0]   # slicing direction
-    secondary_dir = eigvecs[:, 1] # zigzag direction
-    normal_dir = eigvecs[:, 2]    # normal estimation
+    secondary_dir = eigvecs[:, 1] # sweep direction
+    normal_dir = eigvecs[:, 2]    # surface normal approx
 
     points = np.asarray(pcd.points)
     normals = np.asarray(pcd.normals)
@@ -159,8 +33,7 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
     min_proj, max_proj = projections.min(), projections.max()
     num_slices = int((max_proj - min_proj) / line_spacing) + 1
 
-    trajectory = []
-    prev_end = None  # to compare line start/end with previous segment
+    all_slices = []
 
     for i in range(num_slices):
         proj_val = min_proj + i * line_spacing
@@ -171,7 +44,7 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
         if len(slab_points) < 10:
             continue
 
-        # Local 2D frame (secondary_dir = x, orthogonal_dir = y)
+        # Local 2D frame
         x_axis = secondary_dir / np.linalg.norm(secondary_dir)
         y_axis = np.cross(primary_dir, x_axis)
         y_axis /= np.linalg.norm(y_axis)
@@ -182,14 +55,20 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
         local_2d = vecs_to_points @ local_frame
         min_xy = np.min(local_2d, axis=0)
         max_xy = np.max(local_2d, axis=0)
-        x_vals = np.arange(min_xy[0], max_xy[0], point_spacing)
-        y_vals = np.arange(min_xy[1], max_xy[1], point_spacing)
+
+        # ✅ Extend sampling grid slightly beyond object edges, this is to solve edge gap problem
+        margin = 1.0 * point_spacing
+        x_vals = np.arange(min_xy[0] - margin, max_xy[0] + margin, point_spacing)
+        y_vals = np.arange(min_xy[1] - margin, max_xy[1] + margin, point_spacing)
 
         kdtree = KDTree(slab_points)
+        slice_traj = []
 
         for j, y in enumerate(y_vals):
             line_traj = []
-            for x in x_vals:
+            x_iter = x_vals if j % 2 == 0 else x_vals[::-1]
+
+            for x in x_iter:
                 sample_2d = np.array([x, y])
                 slice_origin = center + primary_dir * proj_val
                 sample_3d = slice_origin + sample_2d @ local_frame.T
@@ -197,23 +76,28 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
                 dist, idx = kdtree.query(sample_3d)
                 surface_point = slab_points[idx]
                 normal = slab_normals[idx]
+
                 z_axis = -normal / np.linalg.norm(normal)
                 x_dir = np.cross(secondary_dir, z_axis)
                 x_dir /= np.linalg.norm(x_dir)
                 y_dir = np.cross(z_axis, x_dir)
                 rot = np.column_stack((x_dir, y_dir, z_axis))
+
                 offset_pos = surface_point + offset * z_axis
                 line_traj.append((offset_pos, rot))
 
-            # ⚠️ Stitch this line smartly based on previous endpoint
-            if prev_end is not None:
-                dist_start = np.linalg.norm(line_traj[0][0] - prev_end)
-                dist_end = np.linalg.norm(line_traj[-1][0] - prev_end)
-                if dist_end < dist_start:
-                    line_traj = line_traj[::-1]
+            slice_traj.extend(line_traj)
 
-            trajectory.extend(line_traj)
-            prev_end = trajectory[-1][0]  # last point of current line
+        # ✅ Alternate whole slice direction for smooth U-turn stitching
+        if i % 2 == 1:
+            slice_traj = slice_traj[::-1]
+
+        all_slices.append(slice_traj)
+
+    # Flatten into final trajectory
+    trajectory = []
+    for s in all_slices:
+        trajectory.extend(s)
 
     return trajectory, secondary_dir
 
@@ -284,7 +168,8 @@ def load_downsampled_ply(ply_path, scale_to_meter=True):
 def load_downsampled_ply_with_normals(ply_path, scale_to_meter=True):
     pcd = o3d.io.read_point_cloud(ply_path)
     if scale_to_meter:
-        pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points) * 1000)
+        # pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points) * 1000)
+        pcd.points = o3d.utility.Vector3dVector(np.asarray(pcd.points) * 0.001) # mm → m
     # print(pcd.has_normals())
     # pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.005, max_nn=30))
     # pcd.orient_normals_consistent_tangent_plane(k=10)
@@ -504,13 +389,13 @@ if __name__ == "__main__":
     print("First few points:", points[:5])
 
 
-    min_bound = points.min(axis=0)
-    max_bound = points.max(axis=0)
-    extent = max_bound - min_bound
+    # min_bound = points.min(axis=0)
+    # max_bound = points.max(axis=0)
+    # extent = max_bound - min_bound
 
-    print("Bounding box min:", min_bound)
-    print("Bounding box max:", max_bound)
-    print("Extent (size):", extent)
+    # print("Bounding box min:", min_bound)
+    # print("Bounding box max:", max_bound)
+    # print("Extent (size):", extent)
 
 
     # #mm unit
@@ -520,7 +405,8 @@ if __name__ == "__main__":
     # ply_file_list= ["select-00_downsampled100w_1.1.ply","select-00_downsampled100w_1.2.ply","select-00_downsampled100w_1.3.ply","select-00_downsampled100w_2.1.ply","select-00_downsampled100w_2.2.ply","select-00_downsampled100w_3.1.ply","select-00_downsampled100w_3.2.ply","select-00_downsampled100w_4.1.ply","select-00_downsampled100w_4.2.ply","select-00_downsampled100w_5.ply"]
 
     #algo slice, m unit
-    ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply","class_4_mask_8_surface.ply","class_5_mask_2_surface.ply","class_6_mask_5_surface.ply"]
+    ply_file_list= ["CombinedFace_20250815_103713_downsampled50wmm.ply"]
+    # ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply","class_4_mask_8_surface.ply","class_5_mask_2_surface.ply","class_6_mask_5_surface.ply"]
     # ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply"]
     # ply_file_list= ["class_6_mask_5_surface.ply"]
     
@@ -528,13 +414,13 @@ if __name__ == "__main__":
 
     slice_data = []  # list of (ply_filename, trajectory)
     for ply_file in ply_file_list:
-        pcd = load_downsampled_ply_with_normals(ply_file, scale_to_meter=False)
+        pcd = load_downsampled_ply_with_normals(ply_file, scale_to_meter=True)
         points = np.asarray(pcd.points)
 
         traj, secondary_dir = generate_zigzag_trajectory(
             pcd, 
             point_spacing=0.01, 
-            line_spacing=0.01, 
+            line_spacing=0.005, 
             offset=-0.01, 
             thickness=0.002
             )
@@ -556,6 +442,8 @@ if __name__ == "__main__":
 
     visualize_trajectory(pcd_full, full_trajectory, centroid=centroid)
     save_trajectory_as_quaternions(full_trajectory, "full_polishing_path_1_1_10_new.txt")
+
+
 
 
 
