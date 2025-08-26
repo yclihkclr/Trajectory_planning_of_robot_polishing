@@ -416,8 +416,10 @@ if __name__ == "__main__":
     # #mannual slice, m unit
     # ply_file_list= ["select-00_downsampled100w_1.1.ply","select-00_downsampled100w_1.2.ply","select-00_downsampled100w_1.3.ply","select-00_downsampled100w_2.1.ply","select-00_downsampled100w_2.2.ply","select-00_downsampled100w_3.1.ply","select-00_downsampled100w_3.2.ply","select-00_downsampled100w_4.1.ply","select-00_downsampled100w_4.2.ply","select-00_downsampled100w_5.ply"]
 
-    #algo slice, m unit
+    ## following point cloud (mm) needs to set the "scale_to_meter=True" in load_downsampled_ply_with_normals
     ply_file_list= ["CombinedFace_20250815_103713_downsampled50wmm.ply"]
+
+    ## following point cloud (m) needs to set the "scale_to_meter=False" in load_downsampled_ply_with_normals
     # ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply","class_4_mask_8_surface.ply","class_5_mask_2_surface.ply","class_6_mask_5_surface.ply"]
     # ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply"]
     # ply_file_list= ["class_6_mask_5_surface.ply"]
@@ -446,16 +448,20 @@ if __name__ == "__main__":
 
     order = plan_slice_order(slice_data)
     full_trajectory = merge_ordered_trajectories(slice_data, order, transition_offset=-0.05)
+    reversed_traj = reverse_the_trajectory(full_trajectory)
 
     # Visualization
     mesh_file = "select-00.stl"
     mesh = o3d.io.read_triangle_mesh(mesh_file)
     mesh.compute_vertex_normals()
     visualize_trajectory(mesh, full_trajectory, centroid=centroid)
+    visualize_trajectory(mesh, reversed_traj, centroid=centroid)
+    
 
     visualize_trajectory(pcd_full, full_trajectory, centroid=centroid)
+    visualize_trajectory(pcd_full, reversed_traj, centroid=centroid)
+
     save_trajectory_as_quaternions(full_trajectory, "full_polishing_path_1_1_10_new.txt")
-    reversed_traj = reverse_the_trajectory(full_trajectory) 
     save_trajectory_as_quaternions(reversed_traj,"full_polishing_path_1_1_10_new_reversed.txt")
 
 
