@@ -357,6 +357,9 @@ def merge_ordered_trajectories(slice_data, order, transition_offset=0.01):
     return merged
 
 
+def reverse_the_trajectory(trajectory):
+    reversed_traj = trajectory[::-1]
+    return reversed_traj
 
 # this is for individual slice processing
 # if __name__ == "__main__":
@@ -439,6 +442,7 @@ if __name__ == "__main__":
         # diagnose_zigzag_behavior(traj,secondary_dir)
 
         visualize_trajectory(pcd, traj, centroid=centroid)
+        # visualize_trajectory(pcd, reverse_the_trajectory(traj), centroid=centroid)
 
     order = plan_slice_order(slice_data)
     full_trajectory = merge_ordered_trajectories(slice_data, order, transition_offset=-0.05)
@@ -451,6 +455,8 @@ if __name__ == "__main__":
 
     visualize_trajectory(pcd_full, full_trajectory, centroid=centroid)
     save_trajectory_as_quaternions(full_trajectory, "full_polishing_path_1_1_10_new.txt")
+    reversed_traj = reverse_the_trajectory(full_trajectory) 
+    save_trajectory_as_quaternions(reversed_traj,"full_polishing_path_1_1_10_new_reversed.txt")
 
 
 
