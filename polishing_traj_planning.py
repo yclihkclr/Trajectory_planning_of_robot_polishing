@@ -19,8 +19,8 @@ def get_principal_axes(pcd):
     eigvals, eigvecs = np.linalg.eig(cov)
     return eigvecs, centroid
 
-# new version combine 2D plane projection and Convex Hull bounding Box which gives good results, U pattern is guaranteed
 def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thickness=0.005):
+
     eigvecs, center = get_principal_axes(pcd)
     primary_dir = eigvecs[:, 0]   # slicing direction
     secondary_dir = eigvecs[:, 1] # sweep direction
@@ -32,6 +32,8 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
     projections = points @ primary_dir
     min_proj, max_proj = projections.min(), projections.max()
     num_slices = int((max_proj - min_proj) / line_spacing) + 1
+
+    fixed_x_axis = primary_dir / np.linalg.norm(primary_dir)  # global X-axis as in primary direction to reduce twist
 
     all_slices = []
 
@@ -45,10 +47,10 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
             continue
 
         # Local 2D frame
-        x_axis = secondary_dir / np.linalg.norm(secondary_dir)
-        y_axis = np.cross(primary_dir, x_axis)
-        y_axis /= np.linalg.norm(y_axis)
-        local_frame = np.stack([x_axis, y_axis], axis=1)
+        x_axis_local = secondary_dir / np.linalg.norm(secondary_dir)
+        y_axis_local = np.cross(primary_dir, x_axis_local)
+        y_axis_local /= np.linalg.norm(y_axis_local)
+        local_frame = np.stack([x_axis_local, y_axis_local], axis=1)
         local_origin = center
 
         vecs_to_points = slab_points - local_origin
@@ -78,10 +80,17 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
                 normal = slab_normals[idx]
 
                 z_axis = -normal / np.linalg.norm(normal)
-                x_dir = np.cross(secondary_dir, z_axis)
-                x_dir /= np.linalg.norm(x_dir)
-                y_dir = np.cross(z_axis, x_dir)
-                rot = np.column_stack((x_dir, y_dir, z_axis))
+
+                # ✅ Fixed X-axis logic
+                if np.abs(np.dot(z_axis, fixed_x_axis)) > 0.99:  # nearly parallel
+                    x_axis = np.array([-1, 0, 0])
+                else:
+                    x_axis = fixed_x_axis
+                y_axis = np.cross(z_axis, x_axis)
+                y_axis /= np.linalg.norm(y_axis)
+                x_axis = np.cross(y_axis, z_axis)
+                x_axis /= np.linalg.norm(x_axis)
+                rot = np.column_stack((x_axis, y_axis, z_axis))
 
                 offset_pos = surface_point + offset * z_axis
                 line_traj.append((offset_pos, rot))
@@ -427,7 +436,7 @@ if __name__ == "__main__":
         if len(traj) > 0:
             slice_data.append((ply_file, traj))
 
-        diagnose_zigzag_behavior(traj,secondary_dir)
+        # diagnose_zigzag_behavior(traj,secondary_dir)
 
         visualize_trajectory(pcd, traj, centroid=centroid)
 
