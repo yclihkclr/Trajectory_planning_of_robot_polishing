@@ -19,6 +19,20 @@ def get_principal_axes(pcd):
     eigvals, eigvecs = np.linalg.eig(cov)
     return eigvecs, centroid
 
+def remove_duplicate_points(trajectory, voxel_size=1e-4):
+    voxel_map = {}
+    new_traj = []
+    for pos, rot in trajectory:
+        key = tuple(np.floor(np.array(pos) / voxel_size).astype(int))
+        if key not in voxel_map:
+            voxel_map[key] = True
+            new_traj.append((pos, rot))
+    return new_traj
+
+def sort_slice_by_y(slice_traj):
+    # Sort all points in the slice by Y-axis
+    return sorted(slice_traj, key=lambda x: x[0][1])
+
 def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thickness=0.005):
 
     eigvecs, center = get_principal_axes(pcd)
@@ -96,6 +110,12 @@ def generate_zigzag_trajectory(pcd, point_spacing, line_spacing, offset=0.0, thi
                 line_traj.append((offset_pos, rot))
 
             slice_traj.extend(line_traj)
+
+        # Remove duplicates aggressively
+        slice_traj = remove_duplicate_points(slice_traj, voxel_size=point_spacing * 0.5)
+
+        # Sort slice along Y-axis
+        slice_traj = sort_slice_by_y(slice_traj)
 
         # ✅ Alternate whole slice direction for smooth U-turn stitching
         if i % 2 == 1:
@@ -417,8 +437,8 @@ if __name__ == "__main__":
     # ply_file_list= ["select-00_downsampled100w_1.1.ply","select-00_downsampled100w_1.2.ply","select-00_downsampled100w_1.3.ply","select-00_downsampled100w_2.1.ply","select-00_downsampled100w_2.2.ply","select-00_downsampled100w_3.1.ply","select-00_downsampled100w_3.2.ply","select-00_downsampled100w_4.1.ply","select-00_downsampled100w_4.2.ply","select-00_downsampled100w_5.ply"]
 
     ## following point cloud (mm) needs to set the "scale_to_meter=True" in load_downsampled_ply_with_normals
-    ply_file_list= ["CombinedFace_20250815_103713_downsampled50wmm.ply"]
-
+    # ply_file_list= ["CombinedFace_20250815_103713_downsampled50wmm.ply"]
+    ply_file_list= ["CombinedFace3_20250905_130822_points_normals.ply"]
     ## following point cloud (m) needs to set the "scale_to_meter=False" in load_downsampled_ply_with_normals
     # ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply","class_4_mask_8_surface.ply","class_5_mask_2_surface.ply","class_6_mask_5_surface.ply"]
     # ply_file_list= ["class_0_mask_1_surface.ply","class_0_mask_3_surface.ply","class_0_mask_7_surface.ply","class_1_mask_6_surface.ply","class_1_mask_9_surface.ply","class_2_mask_0_surface.ply","class_3_mask_4_surface.ply"]
@@ -428,7 +448,7 @@ if __name__ == "__main__":
 
     slice_data = []  # list of (ply_filename, trajectory)
     for ply_file in ply_file_list:
-        pcd = load_downsampled_ply_with_normals(ply_file, scale_to_meter=True)
+        pcd = load_downsampled_ply_with_normals(ply_file, scale_to_meter=False)
         points = np.asarray(pcd.points)
 
         traj, secondary_dir = generate_zigzag_trajectory(
